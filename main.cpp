@@ -62,6 +62,8 @@ typedef struct {
     #define MAX_FACES 1800
     Face faces[MAX_FACES];
     int face_count;
+    int startVertexCount = 0;
+    int startTextureCount = 0;
     GLfloat X = 0.0f; // Translate screen to x direction (left or right)
     GLfloat Y = 0.0f; // Translate screen to y direction (up or down)
     GLfloat Z = 0.0f; // Translate screen to z direction (zoom in or out)
@@ -79,7 +81,6 @@ typedef struct {
 Object objects[MAX_OBJECTS];
 
 int object_count = 0;
-
 void rotateCamera(float ang) {
     // rotate the camera (left / right)
 	lx = sin(ang);
@@ -174,14 +175,16 @@ void load_BMP_texture(char *filename) {
 
 void generateObject() {
     // For each object...
-    int o,f, v, i;
+    int o,f, v, i, j;
     int texture_vertex_index = 0;
     int vertex_index = 0;
-    i = 0;
+    i = j = 0;
     for (o = 0; o < object_count; ++o) {
         Object *object = &objects[o];
         glBindTexture (GL_TEXTURE_2D, object->texture);
         // For each face of the current object...
+        i = object->startTextureCount;
+        j = object->startVertexCount;
         glPushMatrix();
             glTranslated(object->rotLx,object->rotLy,object->rotLz);
             glScalef(object->X,object->Y,object->Z);
@@ -197,18 +200,27 @@ void generateObject() {
 
                     // Place a geometry vertex.
                     vertex_index = face->vertices[v];
-                    vertex_index += i;
+                    vertex_index += j;
                     Vertex3D *vertex = &vertices[vertex_index];
                     glVertex3f (vertex->x, vertex->y, vertex->z);
                 }
                 glEnd();
             }
-
+            /*if (o == 5) {
+                printf("tex : %d\nver : %d\n", texture_vertex_index, vertex_index);
+            }
             i = texture_vertex_index + 1;
+            j = vertex_index + 1;
+            if (o==(object_count-2) || o==(object_count-3)) {
+                i = tex_vertex_cnt;
+                j = vertex_cnt;
+            }*/
         glPopMatrix();
     }
 }
 
+int lastVertexCount = 0;
+int lastTextureCount = 0;
 void loadObjectWithTexture(char scne_filename[100], char file_path[100], bool last = false, GLfloat X = 1.0f,GLfloat Y = 1.0f,GLfloat Z = 1.0f,GLfloat rotX = 0.0f,GLfloat rotY = 0.0f,GLfloat rotZ = 0.0f,GLfloat rotLx = 0.0f,GLfloat rotLy = 0.0f,GLfloat rotLz = 0.0f) {
     glEnable (GL_TEXTURE_2D);
 
@@ -241,6 +253,8 @@ void loadObjectWithTexture(char scne_filename[100], char file_path[100], bool la
             current_object->rotLx = rotLx;
             current_object->rotLy = rotLy;
             current_object->rotLz = rotLz;
+            current_object->startTextureCount = lastTextureCount;
+            current_object->startVertexCount = lastVertexCount;
             // Read the object's name.
             sscanf (line, "o %s", current_object->name);
             current_object->face_count = 0;
@@ -268,10 +282,11 @@ void loadObjectWithTexture(char scne_filename[100], char file_path[100], bool la
 
             object_count++;
         } else if (strncmp (line, "v ", 2) == 0) { // If describing a vertex...
+            //if (object_count == n && i == 0) {vertex_cnt = vertex_count; i++;}
             Vertex3D *v = &vertices[vertex_count++];
             sscanf (line, "v %f %f %f", &v->x, &v->y, &v->z);
-
         } else if (strncmp (line, "vt ", 3) == 0) { // If texture vertex...
+            //if (object_count == n && j == 0) {tex_vertex_cnt = texture_vertex_count; j++;}
             Vertex2D *vt = &texture_vertices[texture_vertex_count++];
             sscanf (line, "vt %f %f", &vt->x, &vt->y);
             vt->y = 1 - vt->y;
@@ -293,7 +308,8 @@ void loadObjectWithTexture(char scne_filename[100], char file_path[100], bool la
             }
         } // if type of line
     } // for each line
-
+    lastVertexCount = vertex_count;
+    lastTextureCount = texture_vertex_count;
     fclose (f);
 
     if (last) {
@@ -312,9 +328,10 @@ void display() {
 
     glColor3f(0.3, 0.3, 0.3);
     grid_floor(20, 20);
-
-    generateObject();
-
+    glPushMatrix();
+        glRotated(90,0,1,0);
+        generateObject();
+    glPopMatrix();
     glutSwapBuffers();
     glFlush();
 }
@@ -404,7 +421,7 @@ int main(int argc, char * * argv) {
     glutInit( & argc, argv);
     glutInitDisplayMode(GLUT_DEPTH | GLUT_DOUBLE | GLUT_RGBA);
 
-    glutInitWindowSize(500, 500);
+    glutInitWindowSize(600, 600);
     glutInitWindowPosition(100, 100);
     glutCreateWindow("Texture Mapping");
 
@@ -417,8 +434,31 @@ int main(int argc, char * * argv) {
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
 
-    loadObjectWithTexture("model/cafe_takol.obj","model/cafe_takol_tex.png",false);
+    loadObjectWithTexture("model/cafe_takol_bs.obj","model/cafe_takol_tex.png",false);
+    loadObjectWithTexture("model/satpam_parkir_bs.obj","model/satpam_parkir_tex.png",false);
+    loadObjectWithTexture("model/pagar_bs.obj","model/pagar_tex.png",false);
     loadObjectWithTexture("model/satpam_bs.obj","model/satpam_tex.png",false);
+    loadObjectWithTexture("model/mab_bs.obj","model/building_tex.png",false);
+    loadObjectWithTexture("model/gudang_bs.obj","model/building_tex.png",false);
+    loadObjectWithTexture("model/parkir_bs.obj","model/parkir_tex.png",false);
+    loadObjectWithTexture("model/klinik_bs.obj","model/klinik_tex.png",false);
+    loadObjectWithTexture("model/sekre_mab_bs.obj","model/sekre_mab_tex.png",false);
+    loadObjectWithTexture("model/sekre_stat_bs.obj","model/sekre_mab_tex.png",false);
+    loadObjectWithTexture("model/lab_kom_bs.obj","model/lab_kom_tex.png",false);
+    loadObjectWithTexture("model/genset_bs.obj","model/genset_tex.png",false);
+    loadObjectWithTexture("model/kantin_bs.obj","model/klinik_tex.png",false);
+    loadObjectWithTexture("model/kantor_pos_bs.obj","model/klinik_tex.png",false);
+    loadObjectWithTexture("model/kantor_1_bs.obj","model/klinik_tex.png",false);
+    loadObjectWithTexture("model/kantor_2_bs.obj","model/klinik_tex.png",false);
+    loadObjectWithTexture("model/kantor_3_bs.obj","model/pkspl_tex.png",false);
+    loadObjectWithTexture("model/ilkom_1_bs.obj","model/klinik_tex.png",false);
+    loadObjectWithTexture("model/ilkom_2_bs.obj","model/klinik_tex.png",false);
+    loadObjectWithTexture("model/kantor_blk_1_bs.obj","model/klinik_tex.png",false);
+    loadObjectWithTexture("model/kantor_blk_2_bs.obj","model/klinik_tex.png",false);
+    loadObjectWithTexture("model/kantor_blk_3_bs.obj","model/klinik_tex.png",false);
+    loadObjectWithTexture("model/kantor_blk_4_bs.obj","model/klinik_tex.png",false);
+    loadObjectWithTexture("model/kantor_blk_5_bs.obj","model/klinik_tex.png",false);
+    loadObjectWithTexture("model/kantor_blk_6_bs.obj","model/klinik_tex.png",false);
     loadObjectWithTexture("model/kampus_bs.obj","model/bs_tex.png",true);
 
     glutMainLoop();

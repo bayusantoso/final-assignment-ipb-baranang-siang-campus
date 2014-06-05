@@ -1,0 +1,39 @@
+# Blender MTL File: 'kampus.blend'
+# Material Count: 4
+
+newmtl Color_008
+Ns 96.078431
+Ka 0.000000 0.000000 0.000000
+Kd 0.094118 0.094118 0.094118
+Ks 0.500000 0.500000 0.500000
+Ni -1.000000
+d 1.000000
+illum 2
+
+newmtl material
+Ns 96.078431
+Ka 0.000000 0.000000 0.000000
+Kd 0.800000 0.800000 0.800000
+Ks 0.500000 0.500000 0.500000
+Ni -1.000000
+d 1.000000
+illum 2
+
+newmtl material_1
+Ns 96.078431
+Ka 0.000000 0.000000 0.000000
+Kd 0.727843 0.727843 0.727843
+Ks 0.500000 0.500000 0.500000
+Ni -1.000000
+d 1.000000
+illum 2
+
+newmtl material_texture.png.001
+Ns 96.078431
+Ka 0.000000 0.000000 0.000000
+Kd 0.800000 0.800000 0.800000
+Ks 0.500000 0.500000 0.500000
+Ni -1.000000
+d 1.000000
+illum 2
+map_Kd F:\Kuliah\Semester 2\Komputer Grafis\Tugas Akhir\Project\IPB Baranang Siang Campus Digital Map\final-assignment-ipb-baranang-siang-campus\res\texture\texture.png

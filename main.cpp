@@ -4,6 +4,8 @@
 #include <string.h>
 #include <assert.h>
 #include <math.h>
+#include <iostream>
+#include <vector>
 
 #include <GL/glut.h>
 #include <GL/gl.h>
@@ -11,6 +13,8 @@
 
 #include "glm.h"
 #include "lodepng.h"
+
+using namespace std;
 
 int xRot = 0, yRot = 0;
 
@@ -22,12 +26,12 @@ GLMmodel* model2 = NULL;
 
 // A 3D point.  Used for the scene's geometry.
 typedef struct {
-  float x, y, z;
+    float x, y, z;
 } Vertex3D;
 
 // A 2D point.  Used for a scene's texture coordinates on the geometry.
 typedef struct {
-  float x, y;
+    float x, y;
 } Vertex2D;
 
 // While an Object file may contain multiple objects, each with a set of
@@ -39,29 +43,41 @@ int vertex_count = 0;
 Vertex2D texture_vertices[MAX_VERTICES];
 int texture_vertex_count = 0;
 
+vector<Vertex3D> ListVertices;
+vector<Vertex2D> ListTexturVertices;
+
 // A face is a polygon that makes up part of an object.
-#define MAX_FACE_VERTICES 4
+#define MAX_FACE_VERTICES 10
 typedef struct {
-  int vertices[MAX_FACE_VERTICES];
-  int texture_vertices[MAX_FACE_VERTICES];
-  int vertex_count;
+    int vertices[MAX_FACE_VERTICES];
+    int texture_vertices[MAX_FACE_VERTICES];
+    int vertex_count;
 } Face;
 
 // An object is a major part of the scene, such as hair, clothing, and a body.
 typedef struct {
-  #define MAX_NAME_LENGTH 50
-  char name[MAX_NAME_LENGTH];
+    #define MAX_NAME_LENGTH 50
+    char name[MAX_NAME_LENGTH];
 
-  #define MAX_FACES 1800
-  Face faces[MAX_FACES];
-  int face_count;
-
-  GLuint texture;
+    #define MAX_FACES 1800
+    Face faces[MAX_FACES];
+    int face_count;
+    GLfloat X = 0.0f; // Translate screen to x direction (left or right)
+    GLfloat Y = 0.0f; // Translate screen to y direction (up or down)
+    GLfloat Z = 0.0f; // Translate screen to z direction (zoom in or out)
+    GLfloat rotX = 0.0f; // Rotate screen on x axis
+    GLfloat rotY = 0.0f; // Rotate screen on y axis
+    GLfloat rotZ = 0.0f; // Rotate screen on z axis
+    GLfloat rotLx = 0.0f; // Translate screen by using the glulookAt function (left or right)
+    GLfloat rotLy = 0.0f; // Translate screen by using the glulookAt function (up or down)
+    GLfloat rotLz = 0.0f; // Translate screen by using the glulookAt function (zoom in or out)
+    GLuint texture;
 } Object;
 
 // Objects are parts of the scene, such as hair, body, and clothing.
 #define MAX_OBJECTS 100
 Object objects[MAX_OBJECTS];
+
 int object_count = 0;
 
 void rotateCamera(float ang) {
@@ -156,98 +172,139 @@ void load_BMP_texture(char *filename) {
     free(imdata); // free the texture
 }
 
-void loadObjectWithTexture(char scne_filename[100], char file_path[100]) {
+void generateObject() {
+    // For each object...
+    int o,f, v, i;
+    int texture_vertex_index = 0;
+    int vertex_index = 0;
+    i = 0;
+    for (o = 0; o < object_count; ++o) {
+        Object *object = &objects[o];
+        glBindTexture (GL_TEXTURE_2D, object->texture);
+        // For each face of the current object...
+        glPushMatrix();
+            glTranslated(object->rotLx,object->rotLy,object->rotLz);
+            glScalef(object->X,object->Y,object->Z);
+            for (f=0; f < object->face_count; ++f) {
+                Face *face = &object->faces[f];
+                glBegin(GL_POLYGON);
+                for (v=0; v < face->vertex_count; ++v) {
+                    // Place a texture coordinate.
+                    texture_vertex_index = face->texture_vertices[v];
+                    texture_vertex_index += i;
+                    Vertex2D *texture_vertex = &texture_vertices[texture_vertex_index];
+                    glTexCoord2f (texture_vertex->x, texture_vertex->y);
+
+                    // Place a geometry vertex.
+                    vertex_index = face->vertices[v];
+                    vertex_index += i;
+                    Vertex3D *vertex = &vertices[vertex_index];
+                    glVertex3f (vertex->x, vertex->y, vertex->z);
+                }
+                glEnd();
+            }
+
+            i = texture_vertex_index + 1;
+        glPopMatrix();
+    }
+}
+
+void loadObjectWithTexture(char scne_filename[100], char file_path[100], bool last = false, GLfloat X = 1.0f,GLfloat Y = 1.0f,GLfloat Z = 1.0f,GLfloat rotX = 0.0f,GLfloat rotY = 0.0f,GLfloat rotZ = 0.0f,GLfloat rotLx = 0.0f,GLfloat rotLy = 0.0f,GLfloat rotLz = 0.0f) {
     glEnable (GL_TEXTURE_2D);
 
-        static const char *SCENE_FILENAME;
-        SCENE_FILENAME = scne_filename;
-      // Open the Object file that contains geometry and texture vertices.
-      // This particular scene is by Peter McAlpine.
-      static const char *READ_MODE = "r";
-      FILE *f = fopen (SCENE_FILENAME, READ_MODE);
+    static const char *SCENE_FILENAME;
+    SCENE_FILENAME = scne_filename;
 
-      Object *current_object;
+    // Open the Object file that contains geometry and texture vertices.
+    // This particular scene is by Peter McAlpine.
+    int o = 0;
+    static const char *READ_MODE = "r";
+    FILE *f = fopen (SCENE_FILENAME, READ_MODE);
 
-      // Read each line of the Object file.
-      static const int MAX_LINE_LENGTH = 100;
-      char line[MAX_LINE_LENGTH];
-      while (fgets (line, MAX_LINE_LENGTH, f) != NULL) {
+    Object *current_object;
+
+    // Read each line of the Object file.
+    static const int MAX_LINE_LENGTH = 100;
+    char line[MAX_LINE_LENGTH];
+    int i,j;
+    i = j = 0;
+    while (fgets (line, MAX_LINE_LENGTH, f) != NULL) {
         if (strncmp (line, "o ", 2) == 0) { // If starting a new object...
-          current_object = &objects[object_count];
+            current_object = &objects[object_count];
 
-          // Read the object's name.
-          sscanf (line, "o %s", current_object->name);
-          current_object->face_count = 0;
+            current_object->X = X;
+            current_object->Y = Y;
+            current_object->Z = Z;
+            current_object->rotX = rotX;
+            current_object->rotY = rotY;
+            current_object->rotZ = rotZ;
+            current_object->rotLx = rotLx;
+            current_object->rotLy = rotLy;
+            current_object->rotLz = rotLz;
+            // Read the object's name.
+            sscanf (line, "o %s", current_object->name);
+            current_object->face_count = 0;
 
-          // Load the PNG as the object's texture.
-          // The texture must be loaded into OpenGL after OpenGL is initialized.
-          static const int MAX_FILENAME_LENGTH = 100;
-          char filename[MAX_FILENAME_LENGTH];
-          sprintf (filename, file_path, current_object->name);
-          unsigned char *buffer, *image;
-          size_t buffer_size, image_size;
-          LodePNG_Decoder decoder;
-          LodePNG_Decoder_init (&decoder);
-          LodePNG_loadFile (&buffer, &buffer_size, filename);
-          LodePNG_Decoder_decode (&decoder, &image, &image_size, buffer, buffer_size);
-          assert (!decoder.error);
-          glGenTextures (1, &current_object->texture);
-          glBindTexture (GL_TEXTURE_2D, current_object->texture);
-          glTexImage2D (GL_TEXTURE_2D, 0, GL_RGB, decoder.infoPng.width, decoder.infoPng.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image);
-          glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-          glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-          free (image);
-          free (buffer);
-          LodePNG_Decoder_cleanup (&decoder);
+            // Load the PNG as the object's texture.
+            // The texture must be loaded into OpenGL after OpenGL is initialized.
+            static const int MAX_FILENAME_LENGTH = 100;
+            char filename[MAX_FILENAME_LENGTH];
+            sprintf (filename, file_path, current_object->name);
+            unsigned char *buffer, *image;
+            size_t buffer_size, image_size;
+            LodePNG_Decoder decoder;
+            LodePNG_Decoder_init (&decoder);
+            LodePNG_loadFile (&buffer, &buffer_size, filename);
+            LodePNG_Decoder_decode (&decoder, &image, &image_size, buffer, buffer_size);
+            assert (!decoder.error);
+            glGenTextures (1, &current_object->texture);
+            glBindTexture (GL_TEXTURE_2D, current_object->texture);
+            glTexImage2D (GL_TEXTURE_2D, 0, GL_RGB, decoder.infoPng.width, decoder.infoPng.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image);
+            glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            free (image);
+            free (buffer);
+            LodePNG_Decoder_cleanup (&decoder);
 
-          object_count++;
+            object_count++;
         } else if (strncmp (line, "v ", 2) == 0) { // If describing a vertex...
-          Vertex3D *v = &vertices[vertex_count++];
-          sscanf (line, "v %f %f %f", &v->x, &v->y, &v->z);
+            Vertex3D *v = &vertices[vertex_count++];
+            sscanf (line, "v %f %f %f", &v->x, &v->y, &v->z);
+
         } else if (strncmp (line, "vt ", 3) == 0) { // If texture vertex...
-          Vertex2D *vt = &texture_vertices[texture_vertex_count++];
-          sscanf (line, "vt %f %f", &vt->x, &vt->y);
-          vt->y = 1 - vt->y;
+            Vertex2D *vt = &texture_vertices[texture_vertex_count++];
+            sscanf (line, "vt %f %f", &vt->x, &vt->y);
+            vt->y = 1 - vt->y;
         } else if (strncmp (line, "f ", 2) == 0) { // If an object face...
-          Face *face = &current_object->faces[current_object->face_count++];
-          face->vertex_count = 0;
-          char *subline = &line[2];
-          while (subline != NULL) {
-            int vertex_index, texture_vertex_index;
-            sscanf (subline, "%i/%i", &vertex_index, &texture_vertex_index);
-            int fv = face->vertex_count;
-            face->vertices[fv] = vertex_index - 1;
-            face->texture_vertices[fv] = texture_vertex_index - 1;
-            face->vertex_count++;
-            subline = strchr (subline, ' ');
-            if (subline != NULL) {
-              subline = &subline[1];
+            Face *face = &current_object->faces[current_object->face_count++];
+            face->vertex_count = 0;
+            char *subline = &line[2];
+            while (subline != NULL) {
+                int vertex_index, texture_vertex_index;
+                sscanf (subline, "%i/%i", &vertex_index, &texture_vertex_index);
+                int fv = face->vertex_count;
+                face->vertices[fv] = vertex_index - 1;
+                face->texture_vertices[fv] = texture_vertex_index - 1;
+                face->vertex_count++;
+                subline = strchr (subline, ' ');
+                if (subline != NULL) {
+                    subline = &subline[1];
+                }
             }
-          }
         } // if type of line
-      } // for each line
+    } // for each line
 
-      fclose (f);
+    fclose (f);
 
-      int o;
-
-      // Display interesting stats about the loaded Object file.
-      printf ("Vertices: %i\n", vertex_count);
-      printf ("Texture vertices: %i\n", texture_vertex_count);
-      printf ("Objects: %i\n", object_count);
-      for (o = 0; o < object_count; ++o) {
-        printf ("  %s faces: %i\n", objects[o].name, objects[o].face_count);
-      }
-
-      // Start the main program loop.
-      glutMainLoop(); // never returns
-
-      glDisable (GL_TEXTURE_2D);
-
-      // If the main loop ever ended, we'd want to free the textures.
-      for (o = 0; o < object_count; ++o) {
-        glDeleteTextures (1, &objects[o].texture);
-      }
+    if (last) {
+       // Start the main program loop.
+       glutMainLoop(); // never returns
+       // If the main loop ever ended, we'd want to free the textures.
+       glDisable (GL_TEXTURE_2D);
+       for (o = 0; o < object_count; ++o) {
+            glDeleteTextures (1, &objects[o].texture);
+       }
+   }
 }
 
 void display() {
@@ -255,42 +312,14 @@ void display() {
 
     glColor3f(0.3, 0.3, 0.3);
     grid_floor(20, 20);
-    // For each object...
-  int o;
-  for (o = 0; o < object_count; ++o) {
-    Object *object = &objects[o];
-    glBindTexture (GL_TEXTURE_2D, object->texture);
 
-    // For each face of the current object...
-    int f;
-    for (f = 0; f < object->face_count; ++f) {
-      Face *face = &object->faces[f];
-      glPushMatrix();
-          glTranslated(0,4,0);
-          glScalef(0.5,0.5,0.5);
-          glBegin (GL_POLYGON);
-            int v;
-            for (v = 0; v < face->vertex_count; ++v) {
-              // Place a texture coordinate.
-              int texture_vertex_index = face->texture_vertices[v];
-              Vertex2D *texture_vertex = &texture_vertices[texture_vertex_index];
-              glTexCoord2f (texture_vertex->x, texture_vertex->y);
+    generateObject();
 
-              // Place a geometry vertex.
-              int vertex_index = face->vertices[v];
-              Vertex3D *vertex = &vertices[vertex_index];
-              glVertex3f (vertex->x, vertex->y, vertex->z);
-            }
-          glEnd();
-      glPopMatrix();
-    }
-  }
     glutSwapBuffers();
     glFlush();
 }
 
 void pressKey(int key, int x, int y) {
-
     switch (key) {
 	    case GLUT_KEY_LEFT :
             cameraAngle -= 0.02;
@@ -388,7 +417,9 @@ int main(int argc, char * * argv) {
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
 
-    loadObjectWithTexture("model/eumi.obj","model/eumi_body.png");
+    loadObjectWithTexture("model/cafe_takol.obj","model/cafe_takol_tex.png",false);
+    loadObjectWithTexture("model/satpam_bs.obj","model/satpam_tex.png",false);
+    loadObjectWithTexture("model/kampus_bs.obj","model/bs_tex.png",true);
 
     glutMainLoop();
 
